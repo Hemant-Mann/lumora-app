@@ -2,7 +2,7 @@
 
 A lean, working sample application built on the **Lumora** framework. Demonstrates a Koa-based backend wired up with **MySQL**, **Redis**, and **MongoDB**.
 
-> **Note:** Database service wrappers (`cache`, `mongo`, `mysql`, `redis`, `postgres`) live in the `lumora` framework itself under `lumora/services/`. This app only contains framework glue, hooks, and business modules.
+> **Note:** Database service wrappers (`cache`, `mongo`, `mysql`, `redis`, `postgres`) live in the `lumora` framework itself under `lumora/services/index.js`. This app only contains framework glue, hooks, and business modules.
 
 ## Stack
 
@@ -105,21 +105,21 @@ Server starts on `http://localhost:4000`.
 | GET | `/api/users/:id/events` | List events for a user (MongoDB) |
 | POST | `/api/users/:id/events` | Create an event for a user (MongoDB) |
 
-## Shared Services from `lumora/services`
+## Shared Services from `lumora/services/index.js`
 
 This app imports all database and cache services from the Lumora framework:
 
 ```js
-import { makeCacheClient, makeMongo, MongoClient, MysqlClient, RedisClient } from 'lumora/services'
+import { makeCacheClient, makeMongo, MongoClient, MysqlClient, RedisClient } from 'lumora/services/index.js'
 ```
 
 | Service | Import | Used For |
 |---------|--------|----------|
-| `MongoClient` | `lumora/services` | MongoDB connections & model registry |
-| `MysqlClient` | `lumora/services` | MySQL connections (Knex + mysql2) |
-| `RedisClient` | `lumora/services` | Redis connections & cache-aside |
-| `makeCacheClient` | `lumora/services` | Cache-first DB wrapper |
-| `PostgresClient` | `lumora/services` | Available but not used in this app |
+| `MongoClient` | `lumora/services/index.js` | MongoDB connections & model registry |
+| `MysqlClient` | `lumora/services/index.js` | MySQL connections (Knex + mysql2) |
+| `RedisClient` | `lumora/services/index.js` | Redis connections & cache-aside |
+| `makeCacheClient` | `lumora/services/index.js` | Cache-first DB wrapper |
+| `PostgresClient` | `lumora/services/index.js` | Available but not used in this app |
 
 ### Multi-connection support
 
@@ -143,7 +143,7 @@ RedisClient.disconnectRedis('default')
 ### Cache layer
 
 ```js
-import { makeCacheClient } from 'lumora/services'
+import { makeCacheClient } from 'lumora/services/index.js'
 
 const dbCache = makeCacheClient(mysql, redis, '__lumora__')
 

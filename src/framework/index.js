@@ -1,4 +1,4 @@
-import { makeCacheClient, makeMongo, MongoClient, MysqlClient, RedisClient } from 'lumora/services'
+import { makeCacheClient, makeMongo, MongoClient, MysqlClient, RedisClient } from 'lumora/services/index.js'
 import config from '../config/index.js'
 
 export { default as addRoutes } from './koa/router.js'
@@ -10,7 +10,7 @@ const MONGO_CLIENT_NAME = 'default'
 
 /**
  * Create the default Redis client
- * @returns {import('lumora/services').RedisClient}
+ * @returns {import('lumora/services/index.js').RedisClient}
  */
 const makeRedis = () => RedisClient.makeRedisClient(REDIS_CLIENT_NAME, config.redisUrl)
 
@@ -22,7 +22,7 @@ const disconnectRedisClient = () => RedisClient.disconnectRedis(REDIS_CLIENT_NAM
 
 /**
  * Create the default MySQL client
- * @returns {import('lumora/services').MysqlClient}
+ * @returns {import('lumora/services/index.js').MysqlClient}
  */
 const makeMysqlClient = () => MysqlClient.makeMysql(MYSQL_CLIENT_NAME, { mysqlUri: config.mysqlUri })
 
@@ -34,7 +34,7 @@ const disconnectMysqlClient = () => MysqlClient.disconnectMysql(MYSQL_CLIENT_NAM
 
 /**
  * Create the default MongoDB client
- * @returns {import('lumora/services').MongoClient}
+ * @returns {import('lumora/services/index.js').MongoClient}
  */
 const makeDatabase = () => makeMongo(MONGO_CLIENT_NAME, { mongoUri: config.mongoUri, databaseName: config.databaseName })
 
@@ -56,11 +56,11 @@ export {
  * Build the core services object injected into every request via useServices.
  * Returns connected clients for MySQL, MongoDB, Redis, and a cache-first wrapper.
  * @returns {Object} Core services map
- * @returns {import('lumora/services').MongoClient} return.db - MongoDB client
- * @returns {import('lumora/services').MysqlClient} return.mysql - MySQL client
- * @returns {import('lumora/services').RedisClient} return.redis - Redis client
- * @returns {import('lumora/services').RedisClient} return.cache - Alias for redis
- * @returns {import('lumora/services').CacheClient} return.dbCache - Cache-first DB client
+ * @returns {import('lumora/services/index.js').MongoClient} return.db - MongoDB client
+ * @returns {import('lumora/services/index.js').MysqlClient} return.mysql - MySQL client
+ * @returns {import('lumora/services/index.js').RedisClient} return.redis - Redis client
+ * @returns {import('lumora/services/index.js').RedisClient} return.cache - Alias for redis
+ * @returns {import('lumora/services/index.js').CacheClient} return.dbCache - Cache-first DB client
  */
 export const useCoreServices = () => {
   const db = makeDatabase()

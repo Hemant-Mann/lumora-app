@@ -1,4 +1,4 @@
-import { MongoClient } from 'lumora/services'
+import { MongoClient } from 'lumora/services/index.js'
 import userSchema from './users/schema.js'
 import userEventSchema from './users/userEvents/schema.js'
 
