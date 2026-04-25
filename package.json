@@ -1,0 +1,36 @@
+{
+  "name": "lumora-app",
+  "version": "1.0.0",
+  "description": "Sample Lumora framework app with Koa, MySQL, Redis, and MongoDB",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "dependencies": {
+    "koa": "^2.15.3",
+    "koa-bodyparser": "^4.4.1",
+    "koa-qs": "^3.0.0",
+    "@koa/router": "^12.0.1",
+    "lumora": "file:../lumora",
+    "knex": "^3.1.0",
+    "mysql2": "^3.10.0",
+    "redis": "^5.10.0",
+    "mongoose": "^8.4.0",
+    "radash": "^12.1.1",
+    "lodash": "^4.17.21",
+    "zod": "^3.23.8",
+    "uuid": "^9.0.1",
+    "durhuman": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
