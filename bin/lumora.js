@@ -66,8 +66,10 @@ export const up = async (knex) => {
     t.string('${n.parent?.field}', 20).notNullable().index()`)}
     t.string('name', 255).notNullable()
     t.enum('status', ['active', 'inactive']).defaultTo('active')
-    t.datetime('created_at').defaultTo(knex.fn.now())
-    t.datetime('updated_at').defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
+    // UTC, whatever the server's timezone (knex.fn.now() / CURRENT_TIMESTAMP follow it).
+    // MySQL has no ON UPDATE UTC_TIMESTAMP: set updated_at: new Date() when updating (MYSQL_URI has ?timezone=Z)
+    t.datetime('created_at').defaultTo(knex.raw('(UTC_TIMESTAMP())'))
+    t.datetime('updated_at').defaultTo(knex.raw('(UTC_TIMESTAMP())'))
   })
 }
 
@@ -381,7 +383,9 @@ const testFile = (n) => {
   const parentField = n.parent ? `\n  ${n.parent.field}: 'parent_abc123',` : ''
   const parentArg = n.parent ? `${n.parent.param}: 'parent_abc123', ` : ''
 
-  return `import { describe, it, expect, jest } from '@jest/globals'
+  // Same test for both runners: only describe/it come from the runner, checks use node:assert
+  return `import { describe, it } from '${n.runner === 'jest' ? '@jest/globals' : 'node:test'}'
+import assert from 'node:assert/strict'
 import { ${n.model}Create } from '${m}/routes/create.js'
 import { ${n.model}List } from '${m}/routes/list.js'
 import { ${n.model}FindOne } from '${m}/routes/findOne.js'
@@ -398,38 +402,46 @@ const make${n.Model} = (overrides = {}) => ({
   ...overrides,
 })
 
+// Async stand-in for a service method or the next hook: resolves to \`result\`, records each call's first argument
+const fake = (result) => {
+  const f = async (props) => {
+    f.calls.push(props)
+    return result
+  }
+  f.calls = []
+  return f
+}
+
 describe('${n.folder}', () => {
   describe('${n.model}Create', () => {
     it('should create the record and return it mapped', async () => {
       const record = make${n.Model}()
-      const createRecord = jest.fn().mockResolvedValue(record)
+      const createRecord = fake(record)
 
       const result = await ${n.model}Create({
         services: { ${n.srv}: { createRecord } },
         args: { ${parentArg}name: '  Example  ' },
       })
 
-      expect(result.success).toBe(true)
-      expect(result.${n.model}).toEqual(responseMapping(record))
-      expect(createRecord).toHaveBeenCalledWith(
-        expect.objectContaining({ args: { body: { ${n.parent ? `${n.parent.field}: 'parent_abc123', ` : ''}name: 'Example' } } }),
-      )
+      assert.equal(result.success, true)
+      assert.deepEqual(result.${n.model}, responseMapping(record))
+      assert.deepEqual(createRecord.calls[0].args, { body: { ${n.parent ? `${n.parent.field}: 'parent_abc123', ` : ''}name: 'Example' } })
     })
   })
 
   describe('${n.model}List', () => {
     it('should return mapped records with pagination', async () => {
       const record = make${n.Model}()
-      const findRecords = jest.fn().mockResolvedValue([[record], 1])
+      const findRecords = fake([[record], 1])
 
       const result = await ${n.model}List({
         services: { ${n.srv}: { findRecords } },
         args: { page_no: 1, per_page: 10, filter: {} },
       })
 
-      expect(result.success).toBe(true)
-      expect(result.${n.folder}).toEqual([responseMapping(record)])
-      expect(result.pagination).toEqual({ page_no: 1, per_page: 10, total: 1 })
+      assert.equal(result.success, true)
+      assert.deepEqual(result.${n.folder}, [responseMapping(record)])
+      assert.deepEqual(result.pagination, { page_no: 1, per_page: 10, total: 1 })
     })
   })
 
@@ -439,49 +451,51 @@ describe('${n.folder}', () => {
 
       const result = await ${n.model}FindOne({ args: { ${n.model}: record } })
 
-      expect(result).toEqual({ success: true, ${n.model}: responseMapping(record) })
+      assert.deepEqual(result, { success: true, ${n.model}: responseMapping(record) })
     })
   })
 
   describe('useValidateId', () => {
     it('should add the record to args and call the next hook', async () => {
       const record = make${n.Model}()
-      const findById = jest.fn().mockResolvedValue(record)
-      const next = jest.fn().mockResolvedValue('ok')
+      const next = fake('ok')
 
       const result = await useValidateId()(next)({
-        services: { ${n.srv}: { findById } },
+        services: { ${n.srv}: { findById: fake(record) } },
         args: { ${parentArg}id: record._id },
       })
 
-      expect(result).toBe('ok')
-      expect(next).toHaveBeenCalledWith(expect.objectContaining({ args: expect.objectContaining({ ${n.model}: record }) }))
+      assert.equal(result, 'ok')
+      assert.deepEqual(next.calls[0].args.${n.model}, record)
     })
 
     it('should throw when the record does not exist', async () => {
-      const findById = jest.fn().mockResolvedValue(null)
-      const next = jest.fn()
+      const next = fake()
 
-      await expect(
-        useValidateId()(next)({ services: { ${n.srv}: { findById } }, args: { ${parentArg}id: 'missing' } }),
-      ).rejects.toThrow('${n.Model} not found')
-      expect(next).not.toHaveBeenCalled()
+      await assert.rejects(
+        useValidateId()(next)({ services: { ${n.srv}: { findById: fake(null) } }, args: { ${parentArg}id: 'missing' } }),
+        { message: '${n.Model} not found' },
+      )
+      assert.equal(next.calls.length, 0)
     })
 ${n.parent ? `
     it('should throw when the record belongs to another parent', async () => {
-      const findById = jest.fn().mockResolvedValue(make${n.Model}({ ${n.parent.field}: 'someone_else' }))
-      const next = jest.fn()
+      const next = fake()
 
-      await expect(
-        useValidateId()(next)({ services: { ${n.srv}: { findById } }, args: { ${parentArg}id: '${n.model}_abc123' } }),
-      ).rejects.toThrow('${n.Model} not found')
-      expect(next).not.toHaveBeenCalled()
+      await assert.rejects(
+        useValidateId()(next)({
+          services: { ${n.srv}: { findById: fake(make${n.Model}({ ${n.parent.field}: 'someone_else' })) } },
+          args: { ${parentArg}id: '${n.model}_abc123' },
+        }),
+        { message: '${n.Model} not found' },
+      )
+      assert.equal(next.calls.length, 0)
     })
 ` : ''}  })
 
   describe('buildFilter', () => {
     it('should map query args to a filter', () => {
-      expect(buildFilter({ ${parentArg}status: 'active', search: 'ex' })).toEqual({${n.parent ? `
+      assert.deepEqual(buildFilter({ ${parentArg}status: 'active', search: 'ex' }), {${n.parent ? `
         ${n.parent.field}: 'parent_abc123',` : ''}
         status: 'active',
         name: { operator: 'CONTAINS', value: 'ex' },
@@ -508,6 +522,7 @@ const makeModule = (name, parentName, dbName) => {
   if (!['mongo', 'mysql'].includes(dbName)) fail(`--db must be mongo or mysql, got ${dbName}`)
   const modulesDir = path.resolve('src/modules')
   if (!fs.existsSync(modulesDir)) fail('src/modules not found, run this from the project root')
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
   const ws = words(name)
   const one = singular(ws)
@@ -541,6 +556,8 @@ const makeModule = (name, parentName, dbName) => {
     // Must match lumora's getTableName(Model): UserReview → user_review
     table: one.join('_'),
     migrationTs: new Date().toISOString().replace(/\D/g, '').slice(0, 14),
+    // jest if the project depends on it, else node's built-in runner (node --test)
+    runner: Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).includes('jest') ? 'jest' : 'node',
     toSrc: '../'.repeat(depth + 1),
     testToModules: `${'../'.repeat(depth + 1)}modules/`,
   }

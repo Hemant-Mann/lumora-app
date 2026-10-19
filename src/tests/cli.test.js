@@ -31,6 +31,9 @@ describe('lumora CLI', () => {
     expect(fs.existsSync(path.join(mysqlDir, 'schema.js'))).toBe(false)
     expect(fs.readdirSync(path.join(mysqlDir, 'migrations'))).toEqual([expect.stringMatching(/^\d{14}_create_order_line\.js$/)])
     expect(fs.readFileSync(path.join(mysqlDir, 'service.js'), 'utf8')).toContain('mysql.insertOne(MODEL')
+    const migration = fs.readFileSync(path.join(mysqlDir, 'migrations', fs.readdirSync(path.join(mysqlDir, 'migrations'))[0]), 'utf8')
+    expect(migration).toContain(`defaultTo(knex.raw('(UTC_TIMESTAMP())'))`)
+    expect(migration).not.toMatch(/defaultTo\((knex\.fn\.now|.*CURRENT_TIMESTAMP)/)
 
     // Load the generated code for real (with this repo's node_modules) to prove it wires up
     fs.symlinkSync(path.resolve('node_modules'), path.join(project, 'node_modules'))
@@ -49,6 +52,16 @@ describe('lumora CLI', () => {
 
     // The generated tests must pass as generated
     execFileSync('node', ['--experimental-vm-modules', 'node_modules/jest/bin/jest.js', 'src/tests/productReviews', 'src/tests/users/userReviews', 'src/tests/orderLines'], { cwd: project, stdio: 'pipe' })
+
+    // Without jest in package.json the test is written for node's own runner, and passes there
+    const pkgPath = path.join(project, 'package.json')
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+    delete pkg.devDependencies.jest
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg))
+    run(['make:module', 'invoices', '--db', 'mysql'], project)
+    run(['make:module', 'user-notes', '--parent', 'users'], project)
+    expect(fs.readFileSync(path.join(project, 'src/tests/invoices/routes.test.js'), 'utf8')).toContain(`from 'node:test'`)
+    execFileSync('node', ['--test', 'src/tests/invoices/routes.test.js', 'src/tests/users/userNotes/routes.test.js'], { cwd: project, stdio: 'pipe' })
 
     expect(fs.readFileSync(path.join(project, 'src/modules/models.js'), 'utf8'))
       .toContain('MongoClient.registerModel(MONGO_CLIENT_NAME, PRODUCT_REVIEW_MODEL, productReviewSchema)')

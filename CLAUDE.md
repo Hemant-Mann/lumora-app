@@ -31,6 +31,7 @@ npm run migrate:latest
 - Service functions take `async ({ services, args })` and are exported via `useXxxService()` as `xxxSrv`.
 - Routes import service hooks from `src/modules/core/services.js`, never from a module's `service.js` directly, so any route can compose any module's service without knowing where it lives.
 - DB methods return `[err, result]` tuples; throw a `lumora/core` error on `err`.
+- MySQL times are UTC: `UTC_TIMESTAMP()` defaults in migrations (never `knex.fn.now()` / `CURRENT_TIMESTAMP`), `?timezone=Z` on `MYSQL_URI`.
 - `helper.js` and `mapper.js` are pure (no DB, no services).
 - Enums and the model name live in `constants.js`; never hardcode them elsewhere.
 - Run `npm test` after changes.

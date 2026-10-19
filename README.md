@@ -94,10 +94,12 @@ npm run make:module -- orders --db mysql  # MySQL module (default is --db mongo)
 
 A MySQL module gets `migrations/<timestamp>_create_<table>.js` instead of `schema.js`, and a service
 that uses `services.mysql`. The table name is the snake_case model name (`OrderLine` → `order_line`),
-which is what lumora's MySQL client looks up.
+which is what lumora's MySQL client looks up. Timestamps default to `UTC_TIMESTAMP()`, and `MYSQL_URI` ends in
+`?timezone=Z` so dates written from JS are UTC too; MySQL has no `ON UPDATE UTC_TIMESTAMP`, so set `updated_at: new Date()` when updating.
 
 `make:module` generates every file above with working list / create / findOne routes (MongoDB-backed),
-a passing test file at `src/tests/<module>/routes.test.js`, and registers the module in
+a passing test file at `src/tests/<module>/routes.test.js` (jest if the project depends on jest, else `node:test`;
+the checks use `node:assert`, so the file is the same either way), and registers the module in
 `src/modules/models.js` (Mongo), `src/modules/routes.js` and `src/modules/core/services.js`.
 
 With `--parent users`, routes nest under the parent (`/api/users/:userId/reviews`), records get a
