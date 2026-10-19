@@ -1,4 +1,5 @@
 import { InternalServerError } from 'lumora/core/index.js'
+import { buildEventData } from './helper.js'
 
 const MODEL = 'UserEvent'
 
@@ -24,14 +25,7 @@ export const useUserEventService = () => ({
      */
     createRecord: async ({ services, args }) => {
       const { db } = services
-      const data = {
-        user_id: args.user_id,
-        action: args.action,
-        metadata: args.metadata || {},
-        created_at: new Date(),
-      }
-
-      const [err, record] = await db.insertOne(MODEL, data)
+      const [err, record] = await db.insertOne(MODEL, buildEventData(args))
       if (err) throw new InternalServerError(err.message)
       return record
     },

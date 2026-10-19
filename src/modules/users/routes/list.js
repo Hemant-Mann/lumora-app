@@ -1,23 +1,13 @@
 import { useServices, useQueryString } from 'lumora/hooks/index.js'
 import { useUserService } from '../service.js'
+import { buildUserFilter } from '../helper.js'
 
 const hasValidFilters = () => (func) => async (props) => {
-  const { args } = props
-  const filter = {}
-
-  if (args.status) {
-    filter.status = args.status
-  }
-
-  if (args.search) {
-    filter.name = { operator: 'CONTAINS', value: args.search }
-  }
-
   return await func({
     ...props,
     args: {
       ...props.args,
-      filter,
+      filter: buildUserFilter(props.args),
     }
   })
 }
