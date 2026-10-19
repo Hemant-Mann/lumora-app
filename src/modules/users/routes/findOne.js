@@ -1,19 +1,13 @@
 import { useServices, usePathParams } from 'lumora/hooks/index.js'
 import { useUserService } from '../service.js'
+import { useValidateId } from '../hooks/useValidateId.js'
+import { responseMapping } from '../mapper.js'
 
-export const userFindOne = async ({ services, args }) => {
-  const record = await services.userSrv.findById({ services, args })
-
-  if (!record) {
-    return {
-      success: false,
-      message: 'User not found',
-    }
-  }
-
+// useValidateId has already loaded the user into args.user (or thrown)
+export const userFindOne = async ({ args }) => {
   return {
     success: true,
-    user: record,
+    user: responseMapping(args.user),
   }
 }
 
@@ -24,6 +18,7 @@ export const handler = () => [
   usePathParams(z => ({
     id: z.string().min(1),
   })),
+  useValidateId(),
   userFindOne
 ]
 

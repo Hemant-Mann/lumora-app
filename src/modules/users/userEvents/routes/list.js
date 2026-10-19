@@ -1,5 +1,6 @@
 import { useServices, usePathParams, useQueryString } from 'lumora/hooks/index.js'
 import { useUserEventService } from '../service.js'
+import { responseMapping } from '../mapper.js'
 
 export const userEventList = async ({ services, args }) => {
   const filter = { user_id: args.id }
@@ -11,7 +12,7 @@ export const userEventList = async ({ services, args }) => {
 
   return {
     success: true,
-    events: records,
+    events: records.map(responseMapping),
     pagination: {
       page_no: args.page_no,
       per_page: args.per_page,

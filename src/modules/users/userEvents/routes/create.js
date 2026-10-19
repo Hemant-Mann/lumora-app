@@ -1,5 +1,6 @@
 import { useServices, usePathParams, useJsonBody } from 'lumora/hooks/index.js'
 import { useUserEventService } from '../service.js'
+import { responseMapping } from '../mapper.js'
 
 export const userEventCreate = async ({ services, args }) => {
   const record = await services.userEventSrv.createRecord({
@@ -14,7 +15,7 @@ export const userEventCreate = async ({ services, args }) => {
   return {
     success: true,
     message: 'User event created successfully',
-    event: record,
+    event: responseMapping(record),
   }
 }
 

@@ -39,21 +39,57 @@ src/
     models.js                 # Mongoose model registration
     routes.js                 # Central route registry
     users/
+      constants.js            # MODEL, RESOURCE, enums (STATUS)
       schema.js               # Mongoose schema (MySQL users table)
+      mapper.js               # responseMapping / bodyMapping (DB ↔ API fields)
+      helper.js               # Pure functions, no DB (e.g. buildUserFilter)
       service.js              # Business logic (MySQL + delegates to userEvents)
+      hooks/
+        useValidateId.js      # Loads :id into args.user or throws
       routes/
         index.js              # Route registrations
         create.js             # POST /api/users
         list.js               # GET /api/users
         findOne.js            # GET /api/users/:id
       userEvents/
+        constants.js          # MODEL, action names
         schema.js             # Mongoose schema (MongoDB user_events collection)
+        mapper.js             # responseMapping
+        helper.js             # buildEventData
         service.js            # Business logic (MongoDB)
         routes/
           index.js            # Route registrations
           create.js           # POST /api/users/:id/events
           list.js             # GET /api/users/:id/events
 ```
+
+## Module Structure
+
+Every module follows the same layout. Each file has one job:
+
+| File | Does | Does NOT |
+|------|------|----------|
+| `constants.js` | `MODEL`, `RESOURCE`, enums | Logic |
+| `schema.js` | Mongoose schema | Business rules |
+| `mapper.js` | DB ↔ API field translation | DB access |
+| `helper.js` | Pure functions (filters, builders) | DB access |
+| `service.js` | Business logic + DB ops, exports `useXxxService` | HTTP / validation |
+| `hooks/*.js` | Reusable route hooks (load-by-id, guards) | Business logic |
+| `routes/index.js` | `createWorkflow` registrations | Logic |
+| `routes/*.js` | One endpoint: validate → call service → map response | DB queries |
+
+Register named paths before parameterised ones (`/api/x/search` before `/api/x/:id`).
+
+## CLI
+
+```bash
+node bin/lumora.js new ../my-app          # bootstrap a new project (includes the users example)
+npm run make:module -- products           # scaffold src/modules/products + register model and routes
+```
+
+`make:module` generates every file above with working list / create / findOne routes (MongoDB-backed),
+and registers the module in `src/modules/models.js` and `src/modules/routes.js`.
+Multi-word names work: `product-reviews` → folder `productReviews`, model `ProductReview`, path `/api/product-reviews`.
 
 ## Quick Start
 
@@ -123,7 +159,7 @@ import { makeCacheClient, makeMongo, MongoClient, MysqlClient, RedisClient } fro
 
 ### Multi-connection support
 
-All services support named connections (like `tracker-utils`):
+All services support named connections:
 
 ```js
 // MongoDB
@@ -159,7 +195,7 @@ await dbCache.clearCacheForId('User', userId)
 
 ## MySQL Wrapper
 
-The MySQL client follows the exact 4-file pattern from `tracker-utils`:
+The MySQL client is split into 4 files:
 
 | File | Responsibility |
 |------|----------------|

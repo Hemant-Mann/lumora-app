@@ -4,10 +4,14 @@
   "description": "Sample Lumora framework app with Koa, MySQL, Redis, and MongoDB",
   "type": "module",
   "main": "src/app.js",
+  "bin": {
+    "lumora": "bin/lumora.js"
+  },
   "scripts": {
     "start": "node src/app.js",
     "dev": "node --watch src/app.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "make:module": "node bin/lumora.js make:module"
   },
   "dependencies": {
     "koa": "^2.15.3",

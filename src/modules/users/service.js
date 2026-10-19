@@ -1,7 +1,6 @@
 import { InternalServerError, DuplicateEntryError } from 'lumora/core/index.js'
 import { useUserEventService } from './userEvents/service.js'
-
-const MODEL = 'User'
+import { MODEL } from './constants.js'
 
 /**
  * Service hook for User operations (MySQL-backed)

@@ -1,7 +1,6 @@
 import { InternalServerError } from 'lumora/core/index.js'
 import { buildEventData } from './helper.js'
-
-const MODEL = 'UserEvent'
+import { MODEL } from './constants.js'
 
 /**
  * Service hook for UserEvent operations (MongoDB-backed)

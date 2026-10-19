@@ -1,5 +1,6 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 import { makeUser } from '../helpers/fixtures.js'
+import { responseMapping } from '../../modules/users/mapper.js'
 
 const mockCreateRecord = jest.fn()
 const mockFindRecords = jest.fn()
@@ -40,7 +41,7 @@ describe('Users Routes', () => {
 
       expect(result.success).toBe(true)
       expect(result.message).toBe('User created successfully')
-      expect(result.user).toEqual(user)
+      expect(result.user).toEqual(responseMapping(user))
       expect(mockCreateRecord).toHaveBeenCalledWith(
         expect.objectContaining({
           args: expect.objectContaining({
@@ -115,45 +116,13 @@ describe('Users Routes', () => {
   })
 
   describe('userFindOne', () => {
-    beforeEach(() => mockFindById.mockReset())
-
-    it('should return user when found', async () => {
+    it('should return the user loaded by useValidateId', async () => {
       const user = makeUser()
-      mockFindById.mockResolvedValue(user)
 
-      const result = await userFindOne({
-        services: { userSrv: { findById: mockFindById } },
-        args: { id: 'user_abc123' },
-      })
+      const result = await userFindOne({ args: { id: 'user_abc123', user } })
 
       expect(result.success).toBe(true)
-      expect(result.user).toEqual(user)
-      expect(mockFindById).toHaveBeenCalledWith(
-        expect.objectContaining({ args: expect.objectContaining({ id: 'user_abc123' }) }),
-      )
-    })
-
-    it('should return not found message when user does not exist', async () => {
-      mockFindById.mockResolvedValue(null)
-
-      const result = await userFindOne({
-        services: { userSrv: { findById: mockFindById } },
-        args: { id: 'user_missing' },
-      })
-
-      expect(result.success).toBe(false)
-      expect(result.message).toBe('User not found')
-    })
-
-    it('should propagate service errors', async () => {
-      mockFindById.mockRejectedValue(new Error('DB down'))
-
-      await expect(
-        userFindOne({
-          services: { userSrv: { findById: mockFindById } },
-          args: { id: 'user_abc123' },
-        }),
-      ).rejects.toThrow('DB down')
+      expect(result.user).toEqual(responseMapping(user))
     })
   })
 })
