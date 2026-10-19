@@ -6,8 +6,8 @@ export const userEventCreate = async ({ services, args }) => {
     services,
     args: {
       user_id: args.id,
-      action: args.body.action,
-      metadata: args.body.metadata,
+      action: args.action,
+      metadata: args.metadata,
     }
   })
 
@@ -27,7 +27,7 @@ export const handler = () => [
   })),
   useJsonBody(z => ({
     action: z.string().min(1).max(255),
-    metadata: z.record(z.any()).optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
   })),
   userEventCreate
 ]

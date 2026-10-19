@@ -35,7 +35,7 @@ describe('Users Routes', () => {
 
       const result = await userCreate({
         services: { userSrv: { createRecord: mockCreateRecord, logEvent: mockLogEvent } },
-        args: { body: { name: 'John Doe', email: 'john@example.com', status: 'active' } },
+        args: { name: 'John Doe', email: 'john@example.com', status: 'active' },
       })
 
       expect(result.success).toBe(true)
@@ -61,7 +61,7 @@ describe('Users Routes', () => {
       await expect(
         userCreate({
           services: { userSrv: { createRecord: mockCreateRecord, logEvent: mockLogEvent } },
-          args: { body: { name: 'John', email: 'john@example.com' } },
+          args: { name: 'John', email: 'john@example.com' },
         }),
       ).rejects.toThrow('DB down')
     })

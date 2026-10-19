@@ -2,7 +2,9 @@ import { useServices, useJsonBody } from 'lumora/hooks/index.js'
 import { useUserService } from '../service.js'
 
 export const userCreate = async ({ services, args }) => {
-  const record = await services.userSrv.createRecord({ services, args })
+  // useJsonBody merges the validated fields straight into args
+  const { name, email, status } = args
+  const record = await services.userSrv.createRecord({ services, args: { body: { name, email, status } } })
   await services.userSrv.logEvent({ services, args: { user_id: record._id, action: 'user_created' } })
 
   return {
