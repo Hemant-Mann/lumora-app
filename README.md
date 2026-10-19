@@ -38,6 +38,8 @@ src/
   modules/
     models.js                 # Mongoose model registration
     routes.js                 # Central route registry
+    core/
+      services.js             # Every module's useXxxService, re-exported; routes import from here
     users/
       constants.js            # MODEL, RESOURCE, enums (STATUS)
       migrations/             # Knex migrations for the MySQL `user` table
@@ -96,7 +98,7 @@ which is what lumora's MySQL client looks up.
 
 `make:module` generates every file above with working list / create / findOne routes (MongoDB-backed),
 a passing test file at `src/tests/<module>/routes.test.js`, and registers the module in
-`src/modules/models.js` and `src/modules/routes.js`.
+`src/modules/models.js` (Mongo), `src/modules/routes.js` and `src/modules/core/services.js`.
 
 With `--parent users`, routes nest under the parent (`/api/users/:userId/reviews`), records get a
 `user_id` field, list filters by it, create sets it, and findOne rejects records of another user.

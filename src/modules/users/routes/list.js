@@ -1,5 +1,5 @@
 import { useServices, useQueryString } from 'lumora/hooks/index.js'
-import { useUserService } from '../service.js'
+import { useUserService } from '../../core/services.js'
 import { buildUserFilter } from '../helper.js'
 import { STATUS } from '../constants.js'
 import { responseMapping } from '../mapper.js'

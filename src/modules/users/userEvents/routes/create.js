@@ -1,5 +1,5 @@
 import { useServices, usePathParams, useJsonBody } from 'lumora/hooks/index.js'
-import { useUserEventService } from '../service.js'
+import { useUserEventService } from '../../../core/services.js'
 import { responseMapping } from '../mapper.js'
 
 export const userEventCreate = async ({ services, args }) => {

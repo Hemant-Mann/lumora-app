@@ -1,5 +1,5 @@
 import { useServices, usePathParams } from 'lumora/hooks/index.js'
-import { useUserService } from '../service.js'
+import { useUserService } from '../../core/services.js'
 import { useValidateId } from '../hooks/useValidateId.js'
 import { responseMapping } from '../mapper.js'
 

@@ -1,5 +1,5 @@
 import { useServices, useJsonBody } from 'lumora/hooks/index.js'
-import { useUserService } from '../service.js'
+import { useUserService } from '../../core/services.js'
 import { STATUS } from '../constants.js'
 import { ACTION_USER_CREATED } from '../userEvents/constants.js'
 import { bodyMapping, responseMapping } from '../mapper.js'

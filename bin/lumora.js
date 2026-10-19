@@ -268,7 +268,7 @@ export default endpoints
 `,
 
     'routes/create.js': `import { useServices, ${p('usePathParams, ')}useJsonBody } from 'lumora/hooks/index.js'
-import { ${n.useService} } from '../service.js'
+import { ${n.useService} } from '${n.toSrc}core/services.js'
 import { STATUS } from '../constants.js'
 import { bodyMapping, responseMapping } from '../mapper.js'
 
@@ -299,7 +299,7 @@ export default handler
 `,
 
     'routes/list.js': `import { useServices, ${p('usePathParams, ')}useQueryString } from 'lumora/hooks/index.js'
-import { ${n.useService} } from '../service.js'
+import { ${n.useService} } from '${n.toSrc}core/services.js'
 import { STATUS } from '../constants.js'
 import { buildFilter } from '../helper.js'
 import { responseMapping } from '../mapper.js'
@@ -348,7 +348,7 @@ export default handler
 `,
 
     'routes/findOne.js': `import { useServices, usePathParams } from 'lumora/hooks/index.js'
-import { ${n.useService} } from '../service.js'
+import { ${n.useService} } from '${n.toSrc}core/services.js'
 import { useValidateId } from '../hooks/useValidateId.js'
 import { responseMapping } from '../mapper.js'
 
@@ -566,8 +566,11 @@ const makeModule = (name, parentName, dbName) => {
     `import ${n.model}Endpoints from './${rel}/routes/index.js'`,
   ], /^\s*\.\.\.\w+Endpoints,/, `  ...${n.model}Endpoints,`)
 
+  fs.mkdirSync(path.join(modulesDir, 'core'), { recursive: true })
+  fs.appendFileSync(path.join(modulesDir, 'core/services.js'), `export { ${n.useService} } from '../${rel}/service.js'\n`)
+
   console.log(`Created src/modules/${rel} (${n.srv}, model ${n.Model}, ${n.db}) and src/tests/${rel}/routes.test.js
-Registered in ${n.db === 'mongo' ? 'src/modules/models.js and ' : ''}src/modules/routes.js
+Registered in ${n.db === 'mongo' ? 'src/modules/models.js, ' : ''}src/modules/routes.js and src/modules/core/services.js
 Routes: GET ${n.path}, POST ${n.path}, GET ${n.path}/:id${n.db === 'mysql' ? `\nNext: npm run migrate:latest (creates table ${n.table})` : ''}`)
 }
 

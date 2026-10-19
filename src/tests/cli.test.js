@@ -39,6 +39,10 @@ describe('lumora CLI', () => {
       await import('./src/modules/models.js')
       const knexfile = (await import('./knexfile.js')).default
       if (!knexfile.migrations.directory.includes('src/modules/orderLines/migrations')) throw new Error('migration dir not picked up')
+      const core = await import('./src/modules/core/services.js')
+      for (const hook of ['useUserService', 'useProductReviewService', 'useUserReviewService', 'useOrderLineService']) {
+        if (typeof core[hook] !== 'function') throw new Error(hook + ' not registered in core/services.js')
+      }
       console.log(routes.map(r => r.method + ' ' + r.path).join(','))
     `], { cwd: project, encoding: 'utf8' })
     expect(out.trim().split(',')).toEqual(expect.arrayContaining(['get /api/product-reviews', 'post /api/product-reviews', 'get /api/product-reviews/:id', 'get /api/users/:userId/reviews', 'get /api/users/:userId/reviews/:id']))
