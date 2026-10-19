@@ -7,11 +7,23 @@ Koa backend on the Lumora hook framework. See `README.md` for stack and module l
 Always scaffold with the CLI, then edit the generated files:
 
 ```bash
-npm run make:module -- <name>     # e.g. products, product-reviews
+npm run make:module -- <name>                    # e.g. products, product-reviews
+npm run make:module -- <name> --parent <module>  # sub-module, e.g. user-reviews --parent users
+npm run make:module -- <name> --db mysql         # MySQL module (default is mongo)
 ```
 
-It creates `src/modules/<name>/` (constants, schema, mapper, helper, service, hooks/, routes/)
-and registers the model and routes. `src/modules/users/` is the reference module.
+It creates `src/modules/[<parent>/]<name>/` (constants, schema.js or migrations/, mapper, helper, service, hooks/, routes/),
+a test at `src/tests/[<parent>/]<name>/routes.test.js`, and registers the model and routes.
+Keep the generated test passing as you change the module. `src/modules/users/` is the reference module.
+
+## MySQL schema changes
+
+Never edit a migration that has already run. Add a new one in the module's own folder:
+
+```bash
+npm run migrate:make -- <change_name> --migrations-directory src/modules/<module>/migrations
+npm run migrate:latest
+```
 
 ## Rules
 

@@ -40,7 +40,7 @@ src/
     routes.js                 # Central route registry
     users/
       constants.js            # MODEL, RESOURCE, enums (STATUS)
-      schema.js               # Mongoose schema (MySQL users table)
+      migrations/             # Knex migrations for the MySQL `user` table
       mapper.js               # responseMapping / bodyMapping (DB ↔ API fields)
       helper.js               # Pure functions, no DB (e.g. buildUserFilter)
       service.js              # Business logic (MySQL + delegates to userEvents)
@@ -70,7 +70,8 @@ Every module follows the same layout. Each file has one job:
 | File | Does | Does NOT |
 |------|------|----------|
 | `constants.js` | `MODEL`, `RESOURCE`, enums | Logic |
-| `schema.js` | Mongoose schema | Business rules |
+| `schema.js` (Mongo) | Mongoose schema, registered in `models.js` | Business rules |
+| `migrations/` (MySQL) | Knex migrations that create / alter the table | Business rules |
 | `mapper.js` | DB ↔ API field translation | DB access |
 | `helper.js` | Pure functions (filters, builders) | DB access |
 | `service.js` | Business logic + DB ops, exports `useXxxService` | HTTP / validation |
@@ -85,10 +86,21 @@ Register named paths before parameterised ones (`/api/x/search` before `/api/x/:
 ```bash
 node bin/lumora.js new ../my-app          # bootstrap a new project (includes the users example)
 npm run make:module -- products           # scaffold src/modules/products + register model and routes
+npm run make:module -- user-reviews --parent users   # sub-module: src/modules/users/userReviews
+npm run make:module -- orders --db mysql  # MySQL module (default is --db mongo)
 ```
 
+A MySQL module gets `migrations/<timestamp>_create_<table>.js` instead of `schema.js`, and a service
+that uses `services.mysql`. The table name is the snake_case model name (`OrderLine` → `order_line`),
+which is what lumora's MySQL client looks up.
+
 `make:module` generates every file above with working list / create / findOne routes (MongoDB-backed),
-and registers the module in `src/modules/models.js` and `src/modules/routes.js`.
+a passing test file at `src/tests/<module>/routes.test.js`, and registers the module in
+`src/modules/models.js` and `src/modules/routes.js`.
+
+With `--parent users`, routes nest under the parent (`/api/users/:userId/reviews`), records get a
+`user_id` field, list filters by it, create sets it, and findOne rejects records of another user.
+A leading parent name is dropped from the URL (`user-reviews` → `/reviews`).
 Multi-word names work: `product-reviews` → folder `productReviews`, model `ProductReview`, path `/api/product-reviews`.
 
 ## Quick Start
@@ -106,22 +118,21 @@ cp .env.example .env
 # Edit .env with your database credentials
 ```
 
-### 3. Create the MySQL table
+### 3. Create the MySQL tables
 
 ```sql
 CREATE DATABASE lumora_app;
-
-USE lumora_app;
-
-CREATE TABLE user (
-  _id VARCHAR(20) PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  status ENUM('active', 'inactive') DEFAULT 'active',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
 ```
+
+```bash
+npm run migrate:latest     # runs every src/modules/**/migrations/ in timestamp order
+npm run migrate:rollback   # undo the last batch
+npm run migrate:make -- add_phone_to_user --migrations-directory src/modules/users/migrations
+```
+
+Migrations live inside the module that owns the table. `knexfile.js` finds every `migrations/` folder
+under `src/modules` automatically. Always pass `--migrations-directory` to `migrate:make`, or knex puts
+the file in whichever folder it finds first.
 
 ### 4. Start the app
 

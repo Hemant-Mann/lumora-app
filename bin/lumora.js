@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
 
 const TEMPLATE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const SKIP = new Set(['node_modules', 'coverage', '.git', '.claude', '.env'])
 
 const USAGE = `Usage:
-  lumora new <dir>              Bootstrap a new project (with the example users module)
-  lumora make:module <name>     Create src/modules/<name> and register its model + routes
-                                (run from the project root, e.g. "npm run make:module -- products")`
+  lumora new <dir>                            Bootstrap a new project (with the example users module)
+  lumora make:module <name> [--parent <mod>] [--db mongo|mysql]
+                                              Create src/modules/[<mod>/]<name> + its test, register model + routes
+                                              (run from the project root, e.g. "npm run make:module -- products",
+                                               "npm run make:module -- user-reviews --parent users",
+                                               "npm run make:module -- orders --db mysql")`
 
 const fail = (msg) => {
   console.error(msg)
@@ -41,19 +45,47 @@ const newProject = (dir) => {
   console.log(`Created ${target}\n\nNext:\n  cd ${dir}\n  npm install\n  cp .env.example .env\n  npm run dev`)
 }
 
-const moduleFiles = (n) => ({
-  'constants.js': `export const MODEL = '${n.Model}'
-export const RESOURCE = '${n.model}'
+const moduleFiles = (n) => {
+  // Emit `s` only for sub-modules (n.parent = { field: 'user_id', param: 'userId' })
+  const p = (s) => (n.parent ? s : '')
+  const parentParam = p(`
+    ${n.parent?.param}: z.string().min(1),`)
 
-export const STATUS_ACTIVE = 'active'
-export const STATUS_INACTIVE = 'inactive'
-export const STATUS = [STATUS_ACTIVE, STATUS_INACTIVE]
+  // Emit `s` only for MySQL modules
+  const p2 = (s) => (n.db === 'mysql' ? s : '')
+
+  const storage = n.db === 'mysql'
+    ? {
+      [`migrations/${n.migrationTs}_create_${n.table}.js`]: `/**
+ * @param { import("knex").Knex } knex
+ * @returns { Promise<void> }
+ */
+export const up = async (knex) => {
+  await knex.schema.createTable('${n.table}', (t) => {
+    t.string('_id', 20).primary()${p(`
+    t.string('${n.parent?.field}', 20).notNullable().index()`)}
+    t.string('name', 255).notNullable()
+    t.enum('status', ['active', 'inactive']).defaultTo('active')
+    t.datetime('created_at').defaultTo(knex.fn.now())
+    t.datetime('updated_at').defaultTo(knex.raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
+  })
+}
+
+/**
+ * @param { import("knex").Knex } knex
+ * @returns { Promise<void> }
+ */
+export const down = async (knex) => {
+  await knex.schema.dropTable('${n.table}')
+}
 `,
-
-  'schema.js': `import mongoose from 'mongoose'
+    }
+    : {
+      'schema.js': `import mongoose from 'mongoose'
 import { STATUS, STATUS_ACTIVE } from './constants.js'
 
-const ${n.model}Schema = new mongoose.Schema({
+const ${n.model}Schema = new mongoose.Schema({${p(`
+  ${n.parent?.field}: { type: String, required: true, index: true },`)}
   name: { type: String, required: true },
   status: { type: String, enum: STATUS, default: STATUS_ACTIVE },
   created_at: { type: Date, default: Date.now },
@@ -62,8 +94,19 @@ const ${n.model}Schema = new mongoose.Schema({
 
 export default ${n.model}Schema
 `,
+    }
 
-  'mapper.js': `/**
+  return {
+    ...storage,
+    'constants.js': `export const MODEL = '${n.Model}'
+export const RESOURCE = '${n.model}'
+
+export const STATUS_ACTIVE = 'active'
+export const STATUS_INACTIVE = 'inactive'
+export const STATUS = [STATUS_ACTIVE, STATUS_INACTIVE]
+`,
+
+    'mapper.js': `/**
  * Map a ${n.model} record (DB) to the API response shape
  * @param {Object} record - ${n.Model} record from the database
  * @returns {Object|null} Data for API response
@@ -72,7 +115,8 @@ export const responseMapping = (record) => {
   if (!record) return null
 
   return {
-    id: record._id,
+    id: record._id,${p(`
+    ${n.parent?.field}: record.${n.parent?.field},`)}
     name: record.name,
     status: record.status,
     created_at: record.created_at,
@@ -87,7 +131,8 @@ export const responseMapping = (record) => {
  */
 export const bodyMapping = (args) => {
   const mapped = {}
-
+${p(`
+  if (args.${n.parent?.param} !== undefined) mapped.${n.parent?.field} = args.${n.parent?.param}`)}
   if (args.name !== undefined) mapped.name = args.name.trim()
   if (args.status !== undefined) mapped.status = args.status
 
@@ -95,14 +140,18 @@ export const bodyMapping = (args) => {
 }
 `,
 
-  'helper.js': `/**
+    'helper.js': `/**
  * Build the ${n.model} list filter from validated query args
  * @param {Object} args - Query args (status, search)
  * @returns {Object} Filter object for ${n.srv}.findRecords
  */
 export const buildFilter = (args) => {
   const filter = {}
-
+${p(`
+  if (args.${n.parent?.param}) {
+    filter.${n.parent?.field} = args.${n.parent?.param}
+  }
+`)}
   if (args.status) {
     filter.status = args.status
   }
@@ -115,11 +164,11 @@ export const buildFilter = (args) => {
 }
 `,
 
-  'service.js': `import { InternalServerError } from 'lumora/core/index.js'
+    'service.js': `import { InternalServerError } from 'lumora/core/index.js'
 import { MODEL } from './constants.js'
 
 /**
- * Service hook for ${n.Model} operations (MongoDB-backed)
+ * Service hook for ${n.Model} operations (${n.db === 'mysql' ? 'MySQL' : 'MongoDB'}-backed)
  * @returns {Object} Service map containing ${n.srv}
  */
 export const ${n.useService} = () => ({
@@ -127,13 +176,13 @@ export const ${n.useService} = () => ({
     /**
      * Create a new ${n.model} record
      * @param {Object} params
-     * @param {Object} params.services - Injected services (db)
+     * @param {Object} params.services - Injected services (${n.client})
      * @param {Object} params.args - Request args containing body
      * @returns {Promise<Object>} Created record
      */
     createRecord: async ({ services, args }) => {
-      const { db } = services
-      const [err, record] = await db.insertOne(MODEL, { ...args.body, created_at: new Date(), updated_at: new Date() })
+      const { ${n.client} } = services
+      const [err, record] = await ${n.client}.insertOne(MODEL, { ${p2(`_id: mysql.generateNewId(), `)}...args.body, created_at: new Date(), updated_at: new Date() })
       if (err) throw new InternalServerError(err.message, { key: '${n.folder}.create-failed' })
       return record
     },
@@ -141,18 +190,18 @@ export const ${n.useService} = () => ({
     /**
      * Find many ${n.model} records with pagination and filtering
      * @param {Object} params
-     * @param {Object} params.services - Injected services (db)
+     * @param {Object} params.services - Injected services (${n.client})
      * @param {Object} params.args - Query args (filter, page_no, per_page)
      * @returns {Promise<[Object[], number]>} Tuple of [records, totalCount]
      */
     findRecords: async ({ services, args }) => {
-      const { db } = services
+      const { ${n.client} } = services
       const { filter = {}, page_no = 1, per_page = 10 } = args
 
-      const [err, records] = await db.selectMany(MODEL, filter, { page_no, per_page, sort: { created_at: -1 } })
+      const [err, records] = await ${n.client}.selectMany(MODEL, filter, { page_no, per_page${n.db === 'mongo' ? ', sort: { created_at: -1 }' : ''} })
       if (err) throw new InternalServerError(err.message, { key: '${n.folder}.list-failed' })
 
-      const [countErr, total] = await db.count(MODEL, filter)
+      const [countErr, total] = await ${n.client}.count(MODEL, filter)
       if (countErr) throw new InternalServerError(countErr.message, { key: '${n.folder}.count-failed' })
 
       return [records, total]
@@ -161,13 +210,13 @@ export const ${n.useService} = () => ({
     /**
      * Find a single ${n.model} by ID
      * @param {Object} params
-     * @param {Object} params.services - Injected services (db)
+     * @param {Object} params.services - Injected services (${n.client})
      * @param {Object} params.args - Request args containing id
      * @returns {Promise<Object|null>} Record or null
      */
     findById: async ({ services, args }) => {
-      const { db } = services
-      const [err, record] = await db.selectViaId(MODEL, args.id)
+      const { ${n.client} } = services
+      const [err, record] = await ${n.client}.selectViaId(MODEL, args.id)
       if (err) throw new InternalServerError(err.message, { key: '${n.folder}.find-failed' })
       return record
     },
@@ -175,11 +224,11 @@ export const ${n.useService} = () => ({
 })
 `,
 
-  'hooks/useValidateId.js': `import { BadRequestError } from 'lumora/core/index.js'
+    'hooks/useValidateId.js': `import { BadRequestError } from 'lumora/core/index.js'
 
 /**
  * Load the ${n.model} from the \`id\` path param and add it to args as \`args.${n.model}\`
- * Throws BadRequestError when it does not exist
+ * Throws BadRequestError when it does not exist${p(` or belongs to another ${n.parent?.param.slice(0, -2)}`)}
  * Requires \`${n.srv}\` in services and \`usePathParams\` (id) before it
  * @returns {Function} Lumora hook (func) => (props) => ...
  */
@@ -187,7 +236,7 @@ export const useValidateId = () => (func) => async (props) => {
   const { services, args } = props
 
   const ${n.model} = await services.${n.srv}.findById({ services, args: { id: args.id } })
-  if (!${n.model}) {
+  if (!${n.model}${p(` || ${n.model}.${n.parent?.field} !== args.${n.parent?.param}`)}) {
     throw new BadRequestError('${n.Model} not found', { key: '${n.folder}.not-found' })
   }
 
@@ -201,10 +250,10 @@ export const useValidateId = () => (func) => async (props) => {
 }
 `,
 
-  'routes/index.js': `import { handler as ${n.model}Create } from './create.js'
+    'routes/index.js': `import { handler as ${n.model}Create } from './create.js'
 import { handler as ${n.model}List } from './list.js'
 import { handler as ${n.model}FindOne } from './findOne.js'
-import { createWorkflow } from '../../../framework/index.js'
+import { createWorkflow } from '../${n.toSrc}framework/index.js'
 
 /**
  * @type {Array}
@@ -218,7 +267,7 @@ export const endpoints = [
 export default endpoints
 `,
 
-  'routes/create.js': `import { useServices, useJsonBody } from 'lumora/hooks/index.js'
+    'routes/create.js': `import { useServices, ${p('usePathParams, ')}useJsonBody } from 'lumora/hooks/index.js'
 import { ${n.useService} } from '../service.js'
 import { STATUS } from '../constants.js'
 import { bodyMapping, responseMapping } from '../mapper.js'
@@ -236,7 +285,9 @@ export const ${n.model}Create = async ({ services, args }) => {
 export const handler = () => [
   useServices({
     ...${n.useService}()
-  }),
+  }),${p(`
+  usePathParams(z => ({${parentParam}
+  })),`)}
   useJsonBody(z => ({
     name: z.string().min(1).max(255),
     status: z.enum(STATUS).optional(),
@@ -247,7 +298,7 @@ export const handler = () => [
 export default handler
 `,
 
-  'routes/list.js': `import { useServices, useQueryString } from 'lumora/hooks/index.js'
+    'routes/list.js': `import { useServices, ${p('usePathParams, ')}useQueryString } from 'lumora/hooks/index.js'
 import { ${n.useService} } from '../service.js'
 import { STATUS } from '../constants.js'
 import { buildFilter } from '../helper.js'
@@ -280,7 +331,9 @@ export const ${n.model}List = async ({ services, args }) => {
 export const handler = () => [
   useServices({
     ...${n.useService}()
-  }),
+  }),${p(`
+  usePathParams(z => ({${parentParam}
+  })),`)}
   useQueryString(z => ({
     page_no: z.coerce.number().default(1),
     per_page: z.coerce.number().min(10).max(100).default(10),
@@ -294,7 +347,7 @@ export const handler = () => [
 export default handler
 `,
 
-  'routes/findOne.js': `import { useServices, usePathParams } from 'lumora/hooks/index.js'
+    'routes/findOne.js': `import { useServices, usePathParams } from 'lumora/hooks/index.js'
 import { ${n.useService} } from '../service.js'
 import { useValidateId } from '../hooks/useValidateId.js'
 import { responseMapping } from '../mapper.js'
@@ -311,7 +364,7 @@ export const handler = () => [
   useServices({
     ...${n.useService}()
   }),
-  usePathParams(z => ({
+  usePathParams(z => ({${parentParam}
     id: z.string().min(1),
   })),
   useValidateId(),
@@ -320,9 +373,126 @@ export const handler = () => [
 
 export default handler
 `,
+  }
+}
+
+const testFile = (n) => {
+  const m = `${n.testToModules}${n.rel}`
+  const parentField = n.parent ? `\n  ${n.parent.field}: 'parent_abc123',` : ''
+  const parentArg = n.parent ? `${n.parent.param}: 'parent_abc123', ` : ''
+
+  return `import { describe, it, expect, jest } from '@jest/globals'
+import { ${n.model}Create } from '${m}/routes/create.js'
+import { ${n.model}List } from '${m}/routes/list.js'
+import { ${n.model}FindOne } from '${m}/routes/findOne.js'
+import { useValidateId } from '${m}/hooks/useValidateId.js'
+import { buildFilter } from '${m}/helper.js'
+import { responseMapping } from '${m}/mapper.js'
+
+const make${n.Model} = (overrides = {}) => ({
+  _id: '${n.model}_abc123',${parentField}
+  name: 'Example',
+  status: 'active',
+  created_at: '2024-01-01T00:00:00.000Z',
+  updated_at: '2024-01-01T00:00:00.000Z',
+  ...overrides,
 })
 
-// Add `line` after the last import, and `entry` after the last line matching `anchor`
+describe('${n.folder}', () => {
+  describe('${n.model}Create', () => {
+    it('should create the record and return it mapped', async () => {
+      const record = make${n.Model}()
+      const createRecord = jest.fn().mockResolvedValue(record)
+
+      const result = await ${n.model}Create({
+        services: { ${n.srv}: { createRecord } },
+        args: { ${parentArg}name: '  Example  ' },
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.${n.model}).toEqual(responseMapping(record))
+      expect(createRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ args: { body: { ${n.parent ? `${n.parent.field}: 'parent_abc123', ` : ''}name: 'Example' } } }),
+      )
+    })
+  })
+
+  describe('${n.model}List', () => {
+    it('should return mapped records with pagination', async () => {
+      const record = make${n.Model}()
+      const findRecords = jest.fn().mockResolvedValue([[record], 1])
+
+      const result = await ${n.model}List({
+        services: { ${n.srv}: { findRecords } },
+        args: { page_no: 1, per_page: 10, filter: {} },
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.${n.folder}).toEqual([responseMapping(record)])
+      expect(result.pagination).toEqual({ page_no: 1, per_page: 10, total: 1 })
+    })
+  })
+
+  describe('${n.model}FindOne', () => {
+    it('should return the record loaded by useValidateId', async () => {
+      const record = make${n.Model}()
+
+      const result = await ${n.model}FindOne({ args: { ${n.model}: record } })
+
+      expect(result).toEqual({ success: true, ${n.model}: responseMapping(record) })
+    })
+  })
+
+  describe('useValidateId', () => {
+    it('should add the record to args and call the next hook', async () => {
+      const record = make${n.Model}()
+      const findById = jest.fn().mockResolvedValue(record)
+      const next = jest.fn().mockResolvedValue('ok')
+
+      const result = await useValidateId()(next)({
+        services: { ${n.srv}: { findById } },
+        args: { ${parentArg}id: record._id },
+      })
+
+      expect(result).toBe('ok')
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ args: expect.objectContaining({ ${n.model}: record }) }))
+    })
+
+    it('should throw when the record does not exist', async () => {
+      const findById = jest.fn().mockResolvedValue(null)
+      const next = jest.fn()
+
+      await expect(
+        useValidateId()(next)({ services: { ${n.srv}: { findById } }, args: { ${parentArg}id: 'missing' } }),
+      ).rejects.toThrow('${n.Model} not found')
+      expect(next).not.toHaveBeenCalled()
+    })
+${n.parent ? `
+    it('should throw when the record belongs to another parent', async () => {
+      const findById = jest.fn().mockResolvedValue(make${n.Model}({ ${n.parent.field}: 'someone_else' }))
+      const next = jest.fn()
+
+      await expect(
+        useValidateId()(next)({ services: { ${n.srv}: { findById } }, args: { ${parentArg}id: '${n.model}_abc123' } }),
+      ).rejects.toThrow('${n.Model} not found')
+      expect(next).not.toHaveBeenCalled()
+    })
+` : ''}  })
+
+  describe('buildFilter', () => {
+    it('should map query args to a filter', () => {
+      expect(buildFilter({ ${parentArg}status: 'active', search: 'ex' })).toEqual({${n.parent ? `
+        ${n.parent.field}: 'parent_abc123',` : ''}
+        status: 'active',
+        name: { operator: 'CONTAINS', value: 'ex' },
+      })
+    })
+  })
+})
+`
+}
+
+// Add `imports` after the last import, and `entry` after the last line matching `anchor`
 const register = (file, imports, anchor, entry) => {
   const lines = fs.readFileSync(file, 'utf8').split('\n')
   const lastImport = lines.findLastIndex(l => l.startsWith('import '))
@@ -333,46 +503,76 @@ const register = (file, imports, anchor, entry) => {
   fs.writeFileSync(file, lines.join('\n'))
 }
 
-const makeModule = (name) => {
+const makeModule = (name, parentName, dbName) => {
   if (!name) fail(USAGE)
+  if (!['mongo', 'mysql'].includes(dbName)) fail(`--db must be mongo or mysql, got ${dbName}`)
   const modulesDir = path.resolve('src/modules')
   if (!fs.existsSync(modulesDir)) fail('src/modules not found, run this from the project root')
 
   const ws = words(name)
   const one = singular(ws)
+  let parent = null
+  let base = `/api/${ws.join('-')}`
+
+  if (parentName) {
+    const pws = words(parentName)
+    if (!fs.existsSync(path.join(modulesDir, camel(pws)))) fail(`Parent module src/modules/${camel(pws)} not found`)
+    const pOne = singular(pws)
+    parent = { folder: camel(pws), field: `${pOne.join('_')}_id`, param: `${camel(pOne)}Id` }
+    // "user-reviews" under "users" → /api/users/:userId/reviews
+    const seg = ws.slice(0, pOne.length).join() === pOne.join() && ws.length > pOne.length ? ws.slice(pOne.length) : ws
+    base = `/api/${pws.join('-')}/:${parent.param}/${seg.join('-')}`
+  }
+
+  const rel = parent ? `${parent.folder}/${camel(ws)}` : camel(ws)
+  const depth = rel.split('/').length
   const n = {
     folder: camel(ws),
-    path: `/api/${ws.join('-')}`,
+    rel,
+    path: base,
+    parent,
     model: camel(one),
     Model: pascal(one),
     srv: `${camel(one)}Srv`,
     useService: `use${pascal(one)}Service`,
     MODEL_CONST: `${one.join('_').toUpperCase()}_MODEL`,
+    db: dbName,
+    client: dbName === 'mysql' ? 'mysql' : 'db',
+    // Must match lumora's getTableName(Model): UserReview → user_review
+    table: one.join('_'),
+    migrationTs: new Date().toISOString().replace(/\D/g, '').slice(0, 14),
+    toSrc: '../'.repeat(depth + 1),
+    testToModules: `${'../'.repeat(depth + 1)}modules/`,
   }
 
-  const dir = path.join(modulesDir, n.folder)
+  const dir = path.join(modulesDir, rel)
+  const testPath = path.resolve('src/tests', rel, 'routes.test.js')
   if (fs.existsSync(dir)) fail(`${dir} already exists`)
+  if (fs.existsSync(testPath)) fail(`${testPath} already exists`)
 
   for (const [file, content] of Object.entries(moduleFiles(n))) {
     fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true })
     fs.writeFileSync(path.join(dir, file), content)
   }
+  fs.mkdirSync(path.dirname(testPath), { recursive: true })
+  fs.writeFileSync(testPath, testFile(n))
 
-  register(path.join(modulesDir, 'models.js'), [
-    `import ${n.model}Schema from './${n.folder}/schema.js'`,
-    `import { MODEL as ${n.MODEL_CONST} } from './${n.folder}/constants.js'`,
+  if (n.db === 'mongo') register(path.join(modulesDir, 'models.js'), [
+    `import ${n.model}Schema from './${rel}/schema.js'`,
+    `import { MODEL as ${n.MODEL_CONST} } from './${rel}/constants.js'`,
   ], /registerModel\(/, `  MongoClient.registerModel(MONGO_CLIENT_NAME, ${n.MODEL_CONST}, ${n.model}Schema)`)
 
   register(path.join(modulesDir, 'routes.js'), [
-    `import ${n.model}Endpoints from './${n.folder}/routes/index.js'`,
+    `import ${n.model}Endpoints from './${rel}/routes/index.js'`,
   ], /^\s*\.\.\.\w+Endpoints,/, `  ...${n.model}Endpoints,`)
 
-  console.log(`Created src/modules/${n.folder} (${n.srv}, model ${n.Model})
-Registered in src/modules/models.js and src/modules/routes.js
-Routes: GET ${n.path}, POST ${n.path}, GET ${n.path}/:id`)
+  console.log(`Created src/modules/${rel} (${n.srv}, model ${n.Model}, ${n.db}) and src/tests/${rel}/routes.test.js
+Registered in ${n.db === 'mongo' ? 'src/modules/models.js and ' : ''}src/modules/routes.js
+Routes: GET ${n.path}, POST ${n.path}, GET ${n.path}/:id${n.db === 'mysql' ? `\nNext: npm run migrate:latest (creates table ${n.table})` : ''}`)
 }
 
-const [cmd, arg] = process.argv.slice(2)
+const { positionals, values } = parseArgs({ allowPositionals: true, options: { parent: { type: 'string' }, db: { type: 'string', default: 'mongo' } } })
+const [cmd, arg] = positionals
 if (cmd === 'new') newProject(arg)
-else if (cmd === 'make:module') makeModule(arg)
+else if (cmd === 'make:module') makeModule(arg, values.parent, values.db)
 else fail(USAGE)

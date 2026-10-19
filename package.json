@@ -11,25 +11,28 @@
     "start": "node src/app.js",
     "dev": "node --watch src/app.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "make:module": "node bin/lumora.js make:module"
+    "make:module": "node bin/lumora.js make:module",
+    "migrate:latest": "knex migrate:latest",
+    "migrate:rollback": "knex migrate:rollback",
+    "migrate:make": "knex migrate:make"
   },
   "dependencies": {
+    "@koa/router": "^12.0.1",
+    "dotenv": "^16.4.5",
+    "durhuman": "^1.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
     "koa": "^2.15.3",
     "koa-bodyparser": "^4.4.1",
     "koa-qs": "^3.0.0",
-    "@koa/router": "^12.0.1",
-    "lumora": "github:hemant-mann/lumora",
-    "knex": "^3.1.0",
-    "mysql2": "^3.10.0",
-    "redis": "^5.10.0",
-    "mongoose": "^8.4.0",
-    "radash": "^12.1.1",
     "lodash": "^4.17.21",
-    "zod": "^3.23.8",
+    "lumora": "github:hemant-mann/lumora",
+    "mongoose": "^8.4.0",
+    "mysql2": "^3.10.0",
+    "radash": "^12.1.1",
+    "redis": "^5.10.0",
     "uuid": "^9.0.1",
-    "durhuman": "^1.0.0",
-    "dotenv": "^16.4.5",
-    "jsonwebtoken": "^9.0.2"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "jest": "^29.7.0"
